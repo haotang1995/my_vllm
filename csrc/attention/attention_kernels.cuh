@@ -121,6 +121,8 @@ __device__ void paged_attention_kernel(
   const int num_seq_blocks = DIVIDE_ROUND_UP(seq_len, BLOCK_SIZE);
   const int num_blocks_per_partition =
       USE_PARTITIONING ? PARTITION_SIZE / BLOCK_SIZE : num_seq_blocks;
+  const int num_first_window_blocks = 1024 / BLOCK_SIZE;
+  const int num_last_window_blocks = 6144 / BLOCK_SIZE;
 
   // [start_block_idx, end_block_idx) is the range of blocks to process.
   const int start_block_idx =
@@ -226,6 +228,16 @@ __device__ void paged_attention_kernel(
 
   for (int block_idx = start_block_idx + warp_idx; block_idx < end_block_idx;
        block_idx += NUM_WARPS) {
+    // NOTE(hao): Only attend to the blocks that are in the first window or 
+    // the last window.
+    if (block_idx - start_block_idx < num_first_window_blocks ||
+        end_block_idx - block_idx < num_last_window_blocks) {
+      // Do not skip blocks in the first and last window.
+    } else {
+      // Skip blocks in the middle window.
+      continue;
+    }
+
     // NOTE(woosuk): The block number is stored in int32. However, we cast it to
     // int64 because int32 can lead to overflow when this variable is multiplied
     // by large numbers (e.g., kv_block_stride).
@@ -379,6 +391,15 @@ __device__ void paged_attention_kernel(
   zero(zero_value);
   for (int block_idx = start_block_idx + warp_idx; block_idx < end_block_idx;
        block_idx += NUM_WARPS) {
+    // NOTE(hao): Only attend to the blocks that are in the first window or 
+    // the last window.
+    if (block_idx - start_block_idx < num_first_window_blocks ||
+        end_block_idx - block_idx < num_last_window_blocks) {
+      // Do not skip blocks in the first and last window.
+    } else {
+      // Skip blocks in the middle window.
+      continue;
+    }
     // NOTE(woosuk): The block number is stored in int32. However, we cast it to
     // int64 because int32 can lead to overflow when this variable is multiplied
     // by large numbers (e.g., kv_block_stride).
